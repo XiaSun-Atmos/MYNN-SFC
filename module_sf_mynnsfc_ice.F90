@@ -119,18 +119,17 @@ CONTAINS
        flag_iter   , itimestep   , i           , j           , &
        dx          , xland       ,                             &
        !3d input - transformed to single point
-       U_1         , V_1         , T_1         , QV_1        , &
-       P_1         , dz8w_1      , rho_1       , U_2         , &
-       V_2         , dz8w_2      ,                             &
+       u_1         , v_1         , t_1         , qv_1        , &
+       p_1         , dz8w_1      , rho_1       , u_2         , &
+       v_2         , dz8w_2      ,                             &
        !2d variables - transformed to single point
-       pblh        , znt         , psfcpa      ,               &  !intent(in)
-       tskin       , tsurf       , snowh       , qgh         , &  !intent(in)
-       mavail      , qsfc        ,                             &  !intent(in)
+       pblh        , znt         , psfcpa      , mavail      , &  !intent(in)
+       tskin       , tsurf       , snowh       ,               &  !intent(in)
        chs         , chs2        , cqs2        , cqs         , &  
        ust         , ustm        , stress      ,               &  !intent(inout) 
-       rmol        , zol         , mol         , &
+       rmol        , zol         , mol         ,               &
        psim        , psih        , hfx         , qfx         , &
-       u10         , v10         , th2         ,               &
+       u10         , v10         , th2         , qsfc        , &
        t2          , q2          , flhc        , flqc        , &
        lh          , gz1oz0      , wspd        , rb          , &
        cpm         , ch          , cm          , rstoch_1    , &
@@ -154,7 +153,6 @@ logical, intent(in)         :: flag_restart, flag_cycle
 
 real(kind_phys), parameter  :: xka=2.4e-5   !molecular diffusivity
 real(kind_phys), parameter  :: prt=1.       !prandlt number
-real(kind_phys), parameter  :: snowh_thresh = 50. !mm
 
 !-----------------------------
 ! input / namelist options
@@ -163,10 +161,11 @@ integer, intent(in) :: isfflx
 integer, intent(in) :: spp_sfc, psi_opt
 logical, intent(in) :: compute_flux,compute_diag
 logical, intent(in) :: flag_iter
-
+!-----------------------------
+!input fields/variables
+!-----------------------------
 real(kind_phys), intent(in) ::  mavail,pblh,xland,psfcpa,dx
-real(kind_phys), intent(in) ::  u_1,v_1,u_2,v_2,qv_1,p_1,t_1,     &
-                                dz8w_1,dz8w_2
+real(kind_phys), intent(in) ::  u_1,v_1,u_2,v_2,qv_1,p_1,t_1,dz8w_1,dz8w_2
 real(kind_phys), intent(in) ::  tskin,tsurf,snowh
 real(kind_phys), intent(in) ::  rstoch_1
 
@@ -183,7 +182,7 @@ real(kind_phys), intent(out)::  qstar,wstar
 ! ccpp error handling:
 character(len=*),intent(inout):: errmsg
 integer,         intent(inout):: errflg
-real(kind_phys), intent(inout):: lh,qgh,qsfc,                      &
+real(kind_phys), intent(inout):: lh,qsfc,                          &
                                  znt,cpm,chs,chs2,ch,              &
                                  flhc,flqc,                        &
                                  gz1oz0,wspd,                      &
@@ -238,14 +237,14 @@ real(kind_phys) :: dthvdz,dthvm,vconv,zol2,zol10,zolza,zolz0,zolzt
 real(kind_phys) :: dtg,dtthx,psiq10,psit10
 real(kind_phys) :: fluxc,vsgd
 real(kind_phys) :: restar,visc,dqg,oldust,oldtst
-
+!-------------------------------------------------------------------
 ! Initialize error-handling
 errflg = 0
 errmsg = ''
 !-------------------------------------------------------------------
 
 ! psfc ( in cmb) is used later in saturation checks
-psfc=psfcpa/1000.
+psfc=psfcpa/1000._kind_phys
 !tgs - do computations if flag_iter = .true.
 if ( flag_iter ) then
 
@@ -255,14 +254,9 @@ if ( flag_iter ) then
       if (lsm == lsm_ruc) then
          qsfcmr=qsfc/(one-qsfc)        !mixing ratio
       else
-         if (tsk .lt. 273.15) then
-            !saturation vapor pressure wrt ice (svp1=.6112; 10*mb)
-            e1=svp1*exp(4648*(one/273.15 - one/tsk) - &
-              & 11.64*log(273.15/tsk) + 0.02265*(273.15 - tsk))
-         else
-            !saturation vapor pressure wrt water (bolton 1980)
-            e1=svp1*exp(svp2*(tsk-svpt0)/(tsk-svp3))
-         endif
+         !saturation vapor pressure wrt ice (svp1=.6112; 10*mb)
+         e1=svp1*exp(4648._kind_phys*(one/273.15_kind_phys - one/tsk) - &
+           & 11.64_kind_phys*log(273.15_kind_phys/tsk) + 0.02265_kind_phys*(273.15_kind_phys - tsk))
          qsfc=ep2*e1/(psfc-ep3*e1)             !specific humidity
          qsfcmr=ep2*e1/(psfc-e1)               !mixing ratio
       endif ! lsm
@@ -271,14 +265,9 @@ if ( flag_iter ) then
       ! use what comes out of the nst, lsm, sice after check
       if (qsfc>one.or.qsfc<0.) then
          !print *,'bad qsfc',itimestep,iter,i,qsfc,tskin
-         if (tskin .lt. 273.15) then
-            !saturation vapor pressure wrt ice (svp1=.6112; 10*mb)
-            e1=svp1*exp(4648*(one/273.15 - one/tskin) - &
-              & 11.64*log(273.15/tskin) + 0.02265*(273.15 - tskin))
-         else
-            !saturation vapor pressure wrt water (bolton 1980)
-            e1=svp1*exp(svp2*(tskin-svpt0)/(tskin-svp3))
-         endif
+         !saturation vapor pressure wrt ice (svp1=.6112; 10*mb)
+         e1=svp1*exp(4648._kind_phys*(one/273.15_kind_phys - one/tskin) - &
+           & 11.64_kind_phys*log(273.15_kind_phys/tskin) + 0.02265_kind_phys*(273.15_kind_phys - tskin))
          qsfc=ep2*e1/(psfc-ep3*e1)             !specific humidity
          qsfcmr=ep2*e1/(psfc-e1)               !mixing ratio
       endif
@@ -287,19 +276,8 @@ if ( flag_iter ) then
 
 endif ! flag_iter
 
-if (debug_code >= 1) then
-   write(0,*)"itimestep=",itimestep," iter=",iter
-   write(0,*)"=== important input to mynnsfclayer, i:", i
-   write(0,*)"over ice: pblh=",pblh," tsk=", tskin,           &
-             " tsurf=", tsurf," qsfc=", qsfc," znt=", znt,    &
-             " ust=", ust," snowh=", snowh,"psfcpa=",PSFCPA,  &
-             " dz=",dz8w_1," qfx=",qfx," hfx=",hfx," hpbl=",pblh
-endif
-
-! PSFC ( in cmb) is used later in saturation checks
-psfc=psfcpa/1000.
 qvsh=qv_1/(one+qv_1)        !convert to spec hum (kg/kg)
-thcon=(100000./psfcpa)**rovcp
+thcon=(100000._kind_phys/psfcpa)**rovcp
 if (flag_iter) then
    ! define skin temperatures for land/water/ice
    tsk = tskin
@@ -312,49 +290,22 @@ if (flag_iter) then
 endif ! flag_iter
 
 ! convert lowest layer temperature to potential temperature:
-th_1=t_1*(100000./p_1)**rovcp    !(theta, kelvin)
-tc_1=t_1-273.15                  !(t, celsius)
+th_1  = t_1*(100000._kind_phys/p_1)**rovcp    !(theta, kelvin)
+tc_1  = t_1-273.15_kind_phys                  !(Celsius)
 
 ! convert to virtual temperature
-thv_1=th_1*(one+ep1*qvsh)        !(kelvin)
-tv_1=t_1*(one+ep1*qvsh)          !(kelvin)
+thv_1 = th_1*(one+ep1*qvsh)                   !(kelvin)
+tv_1  = t_1*(one+ep1*qvsh)                    !(kelvin)
 
-rho_1=p_1/(rd*tv_1)      !now using value calculated in sfc driver
-za=p5*dz8w_1           !height of first half-sigma level
-za2=dz8w_1 + p5*dz8w_2 !height of 2nd half-sigma level
-govrth=grav/th_1
+rho_1 = p_1/(rd*tv_1)         !now using value calculated in sfc driver
+za    = p5*dz8w_1             !height of first half-sigma level
+za2   = dz8w_1 + p5*dz8w_2    !height of 2nd half-sigma level
+govrth= grav/th_1
+cpm   = cp*(one+0.84_kind_phys*qv_1)
 
 !qfx=qflx*rho_1
 !hfx=hflx*rho_1*cp
 
-if (debug_code ==2) then
-   !write(*,*)"itimestep=",itimestep
-   write(*,*)"=== derived quantities in mynn sfc layer, i:", i
-   write(*,*)"over ice, tsk=", tsk," thvsk=", thvsk
-   write(*,*)"thv_1=", thv_1," tv_1=",tv_1
-   write(*,*)"rho_1=", rho_1," govrth=",govrth
-endif
-
-! qgh changed to use lowest-level air temp
-! q2sat = qgh in lsm
-if (t_1 .lt. 273.15) then
-   !saturation vapor pressure wrt ice
-   e1=svp1*exp(4648.*(one/273.15 - one/t_1) - &
-     &  11.64*log(273.15/t_1) + 0.02265*(273.15 - t_1))
-else
-   !saturation vapor pressure wrt water (bolton 1980)
-   e1=svp1*exp(svp2*(t_1-svpt0)/(t_1-svp3))
-endif
-pl=p_1/1000.
-!qgh=ep2*e1/(pl-ep3*e1)    !specific humidity
-qgh=ep2*e1/(pl-e1)          !mixing ratio
-cpm=cp*(one+0.84*qv_1)
-
-if (debug_code == 2) then
-   write(*,*)"itimestep=",itimestep
-   write(*,*)"==== q-bombs, i:",i," ice"
-   write(*,*)"qsfc=", qsfc," qsfcmr=", qsfcmr," qgh=",qgh
-endif
 
 if ( flag_iter ) then
    ! dh* 20200401 - note. a weird bug in intel 18 on hera prevents using the
@@ -375,12 +326,12 @@ if ( flag_iter ) then
    ! wstar = vconvc*(g/tsk*pblh*fluxc)**p333
    ! increase height scale, assuming that the non-local transport
    ! from the mass-flux (plume) mixing exceedsd the pblh.
-   wstar = vconvc*(grav/tsk*min(1.5*pblh,4000._kind_phys)*fluxc)**p333
+   wstar = vconvc*(grav/tsk*min(1.5_kind_phys*pblh,4000._kind_phys)*fluxc)**p333
    !--------------------------------------------------------
    ! Mahrt and Sun low-res correction
    ! (for 13 km ~ 0.37 m/s; for 3 km == 0 m/s)
    !--------------------------------------------------------
-   vsgd = min( 0.32_kind_phys * (max(dx/5000.-one,zero))**p333 , 0.5_kind_phys)
+   vsgd = min( 0.32_kind_phys * (max(dx/5000._kind_phys-one,zero))**p333 , p5)
    wspd = sqrt(wspd*wspd+wstar*wstar+vsgd*vsgd)
    wspd = max(wspd,wmin)
    !--------------------------------------------------------
@@ -391,9 +342,21 @@ if ( flag_iter ) then
    rb=max(rb,-2.0_kind_phys)
    rb=min(rb, two)
 
-   if (debug_code == 2) then
-      write(*,*)"over ice,  after rb calc in mynn sfc layer:"
-      write(*,*)"itimestep=",itimestep
+   if (debug_code >= 1) then
+      write(*,*)"over water: itimestep=",itimestep," iter=",iter
+      write(*,*)"=== important input to mynnsfclayer, i:", i
+      write(*,*)" pblh=",pblh," tsk=", tskin
+      write(*,*)" tsurf=", tsurf," qsfc=", qsfc," znt=", znt
+      write(*,*)" ust=", ust," snowh=", snowh,"psfcpa=",PSFCPA
+      write(*,*)" dz=",dz8w_1," qfx=",qfx," hfx=",hfx
+      write(*,*)" psim_stab=",psim_stab(1)," psim_unstab=",psim_stab(1)
+      write(*,*)" psih_stab=",psih_stab(1)," psih_unstab=",psih_unstab(1)
+      write(*,*)"=== derived quantities in mynn sfc layer:"
+      write(*,*)"thv_1=", thv_1," tv_1=",tv_1," thvsk=", thvsk
+      write(*,*)"rho_1=", rho_1," govrth=",govrth
+      write(*,*)"qsfc=", qsfc," qsfcmr=", qsfcmr
+      write(*,*)"=== after rb calc in mynn sfc layer:"
+      write(*,*)"over water, itimestep=",itimestep
       write(*,*)"wspd=", wspd," wstar=", wstar," vsgd=",vsgd
       write(*,*)"rb=", rb," dthvdz=",dthvdz
    endif
@@ -418,15 +381,15 @@ if ( flag_iter ) then
 
    !COMPUTE KINEMATIC VISCOSITY (m2/s) Andreas (1989) CRREL Rep. 89-11
    !valid between -173 and 277 degrees C.
-   visc=1.326e-5_kind_phys*(one + 6.542e-3_kind_phys*tc_1 +        &
-                                  8.301e-6_kind_phys*tc_1*tc_1  -  &
-                                   4.84e-9_kind_phys*tc_1*tc_1*tc_1)
+   visc=1.326e-5_kind_phys*(one + 6.542e-3_kind_phys*tc_1 + &
+                             8.301e-6_kind_phys*tc_1*tc_1 - &
+                         4.84e-9_kind_phys*tc_1*tc_1*tc_1)
 
    ! add stochastic perturbaction of ZNT
    if (spp_sfc==1) then
-      ZNTstoch  = MAX(ZNT + ZNT*one*rstoch_1, 1e-6_kind_phys)
+      zntstoch  = max(znt + znt*one*rstoch_1, 1e-6_kind_phys)
    else
-      ZNTstoch  = ZNT
+      zntstoch  = znt
    endif
 
    !COMPUTE ROUGHNESS REYNOLDS NUMBER (restar) USING DEFAULT ZNT
@@ -445,7 +408,7 @@ if ( flag_iter ) then
    zratio=ZNTstoch/ZT   !need estimate for Li et al.
 
    !Capture a representative ZNT
-   ZNT=ZNTstoch
+   !ZNT=ZNTstoch
 
    !--------------------------------------------------------------------
    !--- DIAGNOSE STABILITY FUNCTIONS FOR THE APPROPRIATE STABILITY CLASS:

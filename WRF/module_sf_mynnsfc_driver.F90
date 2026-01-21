@@ -1,6 +1,7 @@
 !> \file module_sf_mynnsfc_driver.F90
 !!  This serves as the interface between the WRF surface driver and the MYNN
-!!  surface-layer scheme in module_sfc_mynnsfc.F90.                                                                                                                
+!!  surface-layer scheme(s) in module_sfc_mynnsfc_land.F90, module_sfc_mynnsfc_ice.F90, and
+!!  module_sfc_mynnsfc_water.F90.
 
 !>\ingroup gsd_mynnsfc
 !> The following references best describe the code within
@@ -24,8 +25,8 @@
 !!   old option "isftcflx" is now "sf_mynn_sfcflux_water":
 !!             =0: z0, zt, and zq from COARE 3.0 (Fairall et al. 2003)
 !!   (default) =1: z0, zt, and zq from COARE 3.5 (Edson et al 2013)
-!!             =2: z0 from Davis et al (2008), zt & zq from COARE 3.5                                                                                                                            
-!!             =3: z0 from Davis et al (2008), zt & zq from Garratt (1992)                                                                                                                           
+!!             =2: z0 from Davis et al (2008), zt & zq from COARE 3.5
+!!             =3: z0 from Davis et al (2008), zt & zq from Garratt (1992)
 !!             =4: z0 from Taylor and Yelland (2004), zt and zq from COARE 3.5
 !!
 !! This way, the new sf_mynn* options exist in all model frameworks (WRF/MPAS/CCPP)
@@ -98,7 +99,7 @@
         znt      , ust      , ustm     , pblh     , mavail   , zol       , &
         mol      , rmol     , regime   , psim     , psih     , xland     , &
         hfx      , qfx      , lh       , tsk      , flhc     , flqc      , &
-        qgh      , qsfc     , u10      , v10      , th2      , t2        , &
+        qsfc     , u10      , v10      , th2      , t2       ,             &
         q2       , snowh    , gz1oz0   , wspd     , br       , dx        , &
         ch       , qcg      , ck       , cka      , cd       , cda       , &
         stress   , hflx     , qflx     , cm       , fm       , fh        , &
@@ -150,7 +151,6 @@
 !-- flhc        exchange coefficient for heat (w/m^2/k)
 !-- flqc        exchange coefficient for moisture (kg/m^2/s)
 !-- chs         heat/moisture exchange coefficient for lsm (m/s)
-!-- qgh         lowest-level saturated mixing ratio
 !-- qsfc        qv (specific humidity) at the surface
 !-- qsfcmr      qv (mixing ratio) at the surface
 !-- u10         diagnostic 10m u wind
@@ -215,10 +215,13 @@
  logical,intent(inout),optional:: redrag ! reduced drag coeff. flag for high wind over sea (j.han)
  logical,intent(inout),optional:: flag_iter
  
- !Input data
+ !Input data needed for GFS-related options
  integer, dimension(ims:ime,jms:jme), optional, intent(in) :: vegtype
  real(kind_phys),dimension(ims:ime,jms:jme),optional,intent(in):: &
       sigmaf,shdmax,z0pert,ztpert
+
+ !threshold for choosing snow/ice points (In WRF, snowh is in meters)
+ real,parameter:: snow_thresh = 0.05 !5 cm
 
  !phycical constants - now coming in through the common module
 ! real(kind_phys),intent(in):: svp1,svp2,svp3,svpt0
@@ -290,7 +293,6 @@
     mol,    &
     rmol,   &
     qsfc,   &
-    qgh,    &
     znt,    &
     zol,    &
     ust,    &
@@ -319,7 +321,7 @@
  real(kind_phys) :: u_1,v_1,u_2,v_2,qv_1,p_1,t_1,rho_1,dz8w_1,        &
                      dz8w_2,rstoch_1
  real(kind_phys) :: regime_1,hfx_1,qfx_1,lh_1,mol_1,rmol_1,           &
-                     qgh_1,qsfc_1,znt_1,zol_1,ust_1,cpm_1,chs2_1,     &
+                     qsfc_1,znt_1,zol_1,ust_1,cpm_1,chs2_1,           &
                      cqs_1,cqs2_1,chs_1,ch_1,flhc_1,flqc_1,gz1oz0_1,  &
                      wspd_1,br_1,psim_1,psih_1
  real(kind_phys) :: u10_1,v10_1,th2_1,t2_1,q2_1
@@ -395,7 +397,6 @@
        qflx_1   = qfx_1/rho_1      !ccpp
        lh_1     = lh(i,j)
        rmol_1   = rmol(i,j)
-       qgh_1    = qgh(i,j)
        znt_1    = znt(i,j)
        zol_1    = zol(i,j)
        cpm_1    = cpm(i,j)
@@ -478,7 +479,7 @@
           fh2_1    = zero  !ccpp
        endif
 
-       if (((xland_1-1.5) .lt. zero) .and. (snowh_1 .lt. 50)) then 
+       if (((xland_1-1.5) .lt. zero) .and. (snowh_1 .lt. snow_thresh)) then !5 cm threshold for binary snow/no-snow 
           call mynnsfc_land( &
                  !model info
                  i        = i         , j        = j         , itimestep= itimestep, flag_iter = loc_iter  , &
@@ -498,7 +499,7 @@
                  psim     = psim_1    , psih     = psih_1    , hfx      = hfx_1    , qfx       = qfx_1     , &
                  tskin    = tsk_1     , u10      = u10_1     , v10      = v10_1    , th2       = th2_1     , &
                  t2       = t2_1      , q2       = q2_1      , flhc     = flhc_1   , flqc      = flqc_1    , &
-                 snowh    = snowh_1   , qgh      = qgh_1     , qsfc     = qsfc_1   ,                         &
+                 snowh    = snowh_1   , qsfc     = qsfc_1    ,                                               &
                  lh       = lh_1      , gz1oz0   = gz1oz0_1  , wspd     = wspd_1   , rb        = br_1      , &
                  cpm      = cpm_1     , ch       = ch_1      , cm       = cm_1     , rstoch_1  = rstoch_1  , &
                  wstar    = wstar_1   , qstar    = qstar_1   ,                                               &
@@ -514,7 +515,7 @@
                     )
        endif
 
-       if (((xland_1-1.5) .lt. zero) .and. (snowh_1 .ge. 50)) then
+       if (((xland_1-1.5) .lt. zero) .and. (snowh_1 .ge. snow_thresh)) then !5 cm threshold for binary snow/no-snow 
           call mynnsfc_ice( &
                  !model info
                  i        = i         , j        = j         , itimestep= itimestep, flag_iter = loc_iter  , &
@@ -531,7 +532,7 @@
                  psim     = psim_1    , psih     = psih_1    , hfx      = hfx_1    , qfx       = qfx_1     , &
                  tskin    = tsk_1     , u10      = u10_1     , v10      = v10_1    , th2       = th2_1     , &
                  t2       = t2_1      , q2       = q2_1      , flhc     = flhc_1   , flqc      = flqc_1    , &
-                 snowh    = snowh_1   , qgh      = qgh_1     , qsfc     = qsfc_1   ,                         &
+                 snowh    = snowh_1   , qsfc     = qsfc_1    ,                                               &
                  lh       = lh_1      , gz1oz0   = gz1oz0_1  , wspd     = wspd_1   , rb        = br_1      , &
                  cpm      = cpm_1     , ch       = ch_1      , cm       = cm_1     , rstoch_1  = rstoch_1  , &
                  wstar    = wstar_1   , qstar    = qstar_1   ,                                               &
@@ -567,7 +568,7 @@
                  psim     = psim_1    , psih     = psih_1    , hfx      = hfx_1    , qfx       = qfx_1     , &
                  tskin    = tsk_1     , u10      = u10_1     , v10      = v10_1    , th2       = th2_1     , &
                  t2       = t2_1      , q2       = q2_1      , flhc     = flhc_1   , flqc      = flqc_1    , &
-                 snowh    = snowh_1   , qgh      = qgh_1     , qsfc     = qsfc_1   ,                         &
+                 snowh    = snowh_1   , qsfc     = qsfc_1    ,                                               &
                  lh       = lh_1      , gz1oz0   = gz1oz0_1  , wspd     = wspd_1   , rb        = br_1      , &
                  cpm      = cpm_1     , ch       = ch_1      , cm       = cm_1     , rstoch_1  = rstoch_1  , &
                  wstar    = wstar_1   , qstar    = qstar_1   ,                                               &
@@ -590,7 +591,6 @@
        lh(i,j)     = lh_1
        mol(i,j)    = mol_1
        rmol(i,j)   = rmol_1
-       qgh(i,j)    = qgh_1
        qsfc(i,j)   = qsfc_1
        znt(i,j)    = znt_1
        zol(i,j)    = zol_1
