@@ -1,5 +1,5 @@
 ! Module for MYNN SFC scheme tests
-module module_ccpp_mynn_sfc_tests
+module module_sf_mynnsfc_wrf_tests
   implicit none
 
   contains
@@ -10,7 +10,7 @@ module module_ccpp_mynn_sfc_tests
       ! for future use
     end subroutine init_mynn_sfc_flags_for_test_all_true
     !=================================================================================================================    
-    subroutine init_ccpp_data_for_test()
+    subroutine init_input_data_for_test()
       integer :: iostat, line_num
       character(len=2000) :: input_line
       integer, parameter :: input_unit = 10
@@ -18,7 +18,8 @@ module module_ccpp_mynn_sfc_tests
       
       write(*,*) '--- opening data files ---'
       ! Open input file
-      open(unit=input_unit, file='./data/ccpp_input_lnd.txt', status='old', action='read', iostat=iostat)
+      close(unit=input_unit)
+      open(unit=input_unit, file='./data/input_lnd.txt', status='old', action='read', iostat=iostat)
 
       if (iostat /= 0) then
           print *, 'Error opening input file'
@@ -26,7 +27,7 @@ module module_ccpp_mynn_sfc_tests
       end if
 
       ! Open output file
-      open(unit=output_unit, file='./data/ccpp_output_lnd.txt', status='replace', action='write', iostat=iostat)
+      open(unit=output_unit, file='./data/wrf_output_lnd.txt', status='replace', action='write', iostat=iostat)
       write(output_unit,'(A5, A5, A10, A10, A10, A10, A10, A10, A10, A10, A10)')                &
             'itimestep', 'iter', 'T2', 'Q2', 'TH2', 'U10', 'V10', 'HFX', 'LH', 'UST_lnd','PBLH'
       if (iostat /= 0) then
@@ -35,7 +36,7 @@ module module_ccpp_mynn_sfc_tests
           stop
       end if
 
-    end subroutine init_ccpp_data_for_test
+    end subroutine init_input_data_for_test
 
     !===============================================================================
     ! Subroutine to process each line
@@ -183,55 +184,54 @@ module module_ccpp_mynn_sfc_tests
               
       ! Debug: print the line being read
       write(0,*) "Line length:", len_trim(line)
-      write(0,*) "U1D=",U1D, "flag_iter=",flag_iter, "V1D=", V1D," ZNT", ZNT_lnd, "WSPD=",WSPD
+      write(0,*) "U1D=",U1D, "flag_iter=",flag_iter, "V1D=", V1D," ZNT", ZNT_lnd, "WSPD=",WSPD, "UST=",UST_lnd
         
     end subroutine process_line
 
     !=================================================================================================================
-    subroutine ccpp_test()
+ 
+    subroutine wrf_test()
 
-      use module_sf_mynnsfc_driver, only : SFCLAY1D_mynn
+      use module_sf_mynnsfc_land, only : mynnsfc_land
 
       integer :: iostat, line_num
-      integer, parameter :: ids=1, ide=1, jds=1, jde=1, kds=1,kde=1
-      integer, parameter :: ims=1, ime=1, jms=1, jme=1, kms=1,kme=1
-      integer, parameter :: its=1, ite=1, jts=1, jte=1, kts=1,kte=1
+      integer, parameter :: i=1, j=1
 
       character(len=2000) :: input_line
       integer, parameter :: input_unit = 10
       integer, parameter :: output_unit = 20
-      integer, parameter :: n = 1  ! Number of points
 
-      logical, dimension(n)  :: flag_iter 
+      logical :: flag_iter 
       logical :: compute_flux, compute_diag, redrag, flag_restart
-      logical, dimension(n)  :: wet, dry, icy
-      real, dimension(n) ::  U1D, V1D, T1D, QV1D, P1D, dz8w1d, U1D2, V1D2, dz2w1d, &
-              PSFCPA, PBLH, MAVAIL, XLAND, DX, sigmaf, shdmax, z0pert,             &
+      real ::  u_1, v_1, t_1, qv_1, p_1, dz8w_1, u_2, v_2, dz8w_2,                  &
+              psfcpa, pblh, mavial, xland, dx, sigmaf, shdmax, z0pert,              &
               ztpert
-      integer :: J,spp_sfc
-      real, dimension(n) :: tskin_wat, tskin_lnd, tskin_ice, tsurf_wat, tsurf_lnd, tsurf_ice, &
-              qsfc_wat, qsfc_lnd, qsfc_ice, snowh_wat, snowh_lnd, snowh_ice,                  &
+      integer :: spp_sfc
+      real :: tskin, tsurf, qsfc, snowh, znt, ust, cm, ch, rb, stress, psix, psit,  &
+              psix10, psit2, chs, chs2, cqs2, cpm, ustm, zol, mol, rmol,            &
+              psim, psih, hfx, qfx, lh, flhc, flqc, u10, v10, th2, t2, q2,          &
+              gz1oz0, wspd, wstar, qstar, rstoch_1
+      integer :: vegtype, read_stat, isfflx, psi_opt, ivegsrc, sfc_z0_type,         &
+              itimestep, iter, lsm, lsm_ruc, isftcflx, iz0tlnd
+
+
+      ! Additional variables to read process_line
+      logical :: wet, dry, icy
+      real :: ch_ice, ch_lnd, ch_wat, cm_ice, cm_lnd, cm_wat, dz2w1d, dz8w1d, hflx, hflx_ice, &
+              hflx_lnd, hflx_wat, mavail, p1d, psit2_ice, psit2_lnd,                          &
+              psit2_wat, psit_ice, psit_lnd, psit_wat, psix_ice, psix_lnd, psix_wat, qflx,    &
+              qflx_ice, qflx_lnd, qflx_wat, qgh, rb_wat, rb_lnd, rb_ice,                      &
+              stress_wat, stress_lnd, stress_ice, psix10_wat, psix10_lnd, psix10_ice,         &
               ZNT_wat, ZNT_lnd, ZNT_ice, UST_wat, UST_lnd, UST_ice,                           &
-              cm_wat, cm_lnd, cm_ice, ch_wat, ch_lnd, ch_ice,                                 &
-              rb_wat, rb_lnd, rb_ice, stress_wat, stress_lnd, stress_ice,                     &
-                   psix_wat,     psix_lnd,     psix_ice,                                      &
-                   psit_wat,     psit_lnd,     psit_ice,                                      &
-                 psix10_wat,   psix10_lnd,   psix10_ice,                                      &
-                  psit2_wat,    psit2_lnd,    psit2_ice,                                      &
-                   HFLX_wat,     HFLX_lnd,     HFLX_ice,                                      &
-                   QFLX_wat,     QFLX_lnd,     QFLX_ice,                                      &
-                 ch,CHS,CHS2,CQS2,CPM,                                                        &
-                 ZNT,USTM,ZOL,MOL,RMOL,                                                       &
-                 PSIM,PSIH,                                                                   &
-                 HFLX,HFX,QFLX,QFX,LH,FLHC,FLQC,                                              &
-                 QGH,QSFC,                                                                    &
-                 U10,V10,TH2,T2,Q2,                                                           &
-                 GZ1OZ0,WSPD,wstar,qstar,                                                     &
-                 rstoch1D     
-      integer, dimension(n) :: vegtype
-                  
-      integer :: read_stat,ISFFLX,isftcflx,iz0tlnd,psi_opt,ivegsrc,sfc_z0_type,itimestep, iter,lsm, lsm_ruc
-      
+              tskin_wat, tskin_lnd, tskin_ice, tsurf_wat, tsurf_lnd, tsurf_ice,               &
+              qsfc_wat, qsfc_lnd, qsfc_ice, snowh_wat, snowh_lnd, snowh_ice,                  &
+              U1D, V1D, T1D, QV1D,U1D2, V1D2,rstoch1D
+
+      !-----------------------------
+      ! input stability function tables
+      !-----------------------------
+      real,dimension(0:1000) :: psim_stab,psim_unstab, &
+                                                      psih_stab,psih_unstab
       ! Variables for error handling
       character(len=512) :: errmsg
       integer :: errflg
@@ -239,13 +239,13 @@ module module_ccpp_mynn_sfc_tests
       errmsg = ''
       errflg = 0
 
-      write(*,*) '--- entring ccpp_test subroutine'    
+      write(*,*) '--- entering wrf_test subroutine ---'    
       ! Initialize input data for tests
-      call init_ccpp_data_for_test()
+      call init_input_data_for_test()
 
       ! Read header
       read(input_unit, '(A)', iostat=iostat) input_line
-
+      ! read(input_unit, '(A)', iostat=iostat) input_line
       ! Process each line
       line_num = 0
       do
@@ -262,92 +262,85 @@ module module_ccpp_mynn_sfc_tests
           line_num = line_num + 1
           
           ! Call subroutine to process the line
-          call process_line(input_line, output_unit, line_num, flag_iter(1),   &
-           U1D(1),  V1D(1),  T1D(1),  QV1D(1),  P1D(1),  dz8w1d(1),            &
-           U1D2(1),  V1D2(1),  dz2w1d(1),                                      &
-           PSFCPA(1),  PBLH(1),  MAVAIL(1),  XLAND(1),  DX(1),                 &
-           ISFFLX,  isftcflx,  iz0tlnd,  psi_opt,                              &
-           compute_flux,  compute_diag,                                        &
-           sigmaf(1),  vegtype(1),  shdmax(1),  ivegsrc,                       &
-           z0pert(1),  ztpert(1),                                              &
-           redrag,  sfc_z0_type,                                               &
-           itimestep,  iter,  flag_restart,  lsm,  lsm_ruc,                    &
-                  wet(1),            dry(1),            icy(1),                &
-            tskin_wat(1),      tskin_lnd(1),      tskin_ice(1),                &
-            tsurf_wat(1),      tsurf_lnd(1),      tsurf_ice(1),                &
-             qsfc_wat(1),       qsfc_lnd(1),       qsfc_ice(1),                &
-            snowh_wat(1),      snowh_lnd(1),      snowh_ice(1),                &
-              ZNT_wat(1),        ZNT_lnd(1),        ZNT_ice(1),                &
-              UST_wat(1),        UST_lnd(1),        UST_ice(1),                &
-               cm_wat(1),         cm_lnd(1),         cm_ice(1),                &
-               ch_wat(1),         ch_lnd(1),         ch_ice(1),                &
-               rb_wat(1),         rb_lnd(1),         rb_ice(1),                &
-           stress_wat(1),     stress_lnd(1),     stress_ice(1),                &
-             psix_wat(1),       psix_lnd(1),       psix_ice(1),                &
-             psit_wat(1),       psit_lnd(1),       psit_ice(1),                &
-             psix10_wat(1),     psix10_lnd(1),     psix10_ice(1),              &
-             psit2_wat(1),      psit2_lnd(1),      psit2_ice(1),               &
-             HFLX_wat(1),       HFLX_lnd(1),       HFLX_ice(1),                &
-             QFLX_wat(1),       QFLX_lnd(1),       QFLX_ice(1),                &
-             ch(1),  CHS(1),  CHS2(1),  CQS2(1),  CPM(1),                      &
-             ZNT(1),  USTM(1),  ZOL(1),  MOL(1),  RMOL(1),                     &
-             PSIM(1),  PSIH(1),                                                &
-             HFLX(1),  HFX(1),  QFLX(1),  QFX(1),  LH(1),  FLHC(1),  FLQC(1),  &
-             QGH(1),  QSFC(1),                                                 &
-             U10(1),  V10(1),  TH2(1),  T2(1),  Q2(1),                         &
-             GZ1OZ0(1),  WSPD(1),  wstar(1),  qstar(1),                        &
-             spp_sfc,  rstoch1D(1))
+          call process_line(input_line, output_unit, line_num, flag_iter,     &
+           U1D,  V1D,  T1D,  QV1D,  P1D,  dz8w1d,                             &
+           U1D2,  V1D2,  dz2w1d,                                              &
+           PSFCPA,  PBLH,  MAVAIL,  XLAND,  DX,                               &
+           ISFFLX,  isftcflx,  iz0tlnd,  psi_opt,                             &
+           compute_flux,  compute_diag,                                       &
+           sigmaf,  vegtype,  shdmax,  ivegsrc,                               &
+           z0pert,  ztpert,                                                   &
+           redrag,  sfc_z0_type,                                              &
+           itimestep,  iter,  flag_restart,  lsm,  lsm_ruc,                   &
+                  wet,            dry,            icy,                        &
+            tskin_wat,      tskin_lnd,      tskin_ice,                        &
+            tsurf_wat,      tsurf_lnd,      tsurf_ice,                        &
+             qsfc_wat,       qsfc_lnd,       qsfc_ice,                        &
+            snowh_wat,      snowh_lnd,      snowh_ice,                        &
+              ZNT_wat,        ZNT_lnd,        ZNT_ice,                        &
+              UST_wat,        UST_lnd,        UST_ice,                        &
+               cm_wat,         cm_lnd,         cm_ice,                        &
+               ch_wat,         ch_lnd,         ch_ice,                        &
+               rb_wat,         rb_lnd,         rb_ice,                        &
+           stress_wat,     stress_lnd,     stress_ice,                        &
+             psix_wat,       psix_lnd,       psix_ice,                        &
+             psit_wat,       psit_lnd,       psit_ice,                        &
+             psix10_wat,     psix10_lnd,     psix10_ice,                      &
+             psit2_wat,      psit2_lnd,      psit2_ice,                       &
+             HFLX_wat,       HFLX_lnd,       HFLX_ice,                        &
+             QFLX_wat,       QFLX_lnd,       QFLX_ice,                        &
+             ch,  CHS,  CHS2,  CQS2,  CPM,                                    &
+             ZNT,  USTM,  ZOL,  MOL,  RMOL,                                   &
+             PSIM,  PSIH,                                                     &
+             HFLX,  HFX,  QFLX,  QFX,  LH,  FLHC,  FLQC,                      &
+             QGH,  QSFC,                                                      &
+             U10,  V10,  TH2,  T2,  Q2,                                       &
+             GZ1OZ0,  WSPD,  wstar,  qstar,                                   &
+             spp_sfc,  rstoch1D)
 
          ! Initialize MYNN SFC
-          write(*,*) '--- calling  SFCLAY1D_mynn()'
+          write(*,*) '--- calling  mynnsfc_land() ---'
 
-          call SFCLAY1D_mynn(flag_iter,                                                                             &
-             J=99999,U1D=U1D,V1D=V1D,T1D=T1D,QV1D=QV1D,P1D=P1D,dz8w1d=dz8w1d,U1D2=U1D2,V1D2=V1D2,dz2w1d=dz2w1d,     &
-             PSFCPA=PSFCPA,PBLH=PBLH,MAVAIL=MAVAIL,XLAND=XLAND,DX=DX,                                               &
-             ISFFLX=ISFFLX,isftcflx=isftcflx,iz0tlnd=iz0tlnd,psi_opt=psi_opt,                                       &
-             compute_flux=compute_flux,compute_diag=compute_diag,                                                   &
-             sigmaf=sigmaf,vegtype=vegtype,shdmax=shdmax,ivegsrc=ivegsrc,                                           &  !intent(in)
-             z0pert=z0pert,ztpert=ztpert,                                                                           &  !intent(in)
-             redrag=redrag,sfc_z0_type=sfc_z0_type,                                                                 &  !intent(in)
-             itimestep=itimestep,iter=iter,flag_restart=flag_restart,lsm=lsm,lsm_ruc=lsm_ruc,                       &
-                    wet=wet,          dry=dry,          icy=icy,                                                    &  !intent(in)
-              tskin_wat=tskin_wat,    tskin_lnd=tskin_lnd,    tskin_ice=tskin_ice,                                  &  !intent(in)
-              tsurf_wat=tsurf_wat,    tsurf_lnd=tskin_lnd,    tsurf_ice=tskin_ice,                                  &  !intent(in)
-               qsfc_wat=qsfc_wat,     qsfc_lnd=qsfc_lnd,     qsfc_ice=qsfc_ice,                                     &  !intent(in)
-              snowh_wat=snowh_wat,    snowh_lnd=snowh_lnd,    snowh_ice=snowh_ice,                                  &  !intent(in)
-                ZNT_wat=ZNT_wat,      ZNT_lnd=ZNT_lnd,      ZNT_ice=ZNT_ice,                                        &  !intent(inout)
-                UST_wat=UST_wat,      UST_lnd=UST_lnd,      UST_ice=UST_ice,                                        &  !intent(inout)
-                 cm_wat=cm_wat,       cm_lnd=cm_lnd,       cm_ice=cm_ice,                                           &  !intent(inout)
-                 ch_wat=ch_wat,       ch_lnd=ch_lnd,       ch_ice=ch_ice,                                           &  !intent(inout)
-                 rb_wat=rb_wat,       rb_lnd=rb_lnd,       rb_ice=rb_ice,                                           &  !intent(inout)
-             stress_wat=stress_wat,   stress_lnd=stress_lnd,   stress_ice=stress_ice,                               &  !intent(inout)
-                psix_wat=psix_wat,     psix_lnd=psix_lnd,     psix_ice=psix_ice,                                    &  !=fm, intent(inout)
-               psit_wat=psit_wat,     psit_lnd=psit_lnd,     psit_ice=psix_ice,                                     &  !=fh, intent(inout)
-             psix10_wat=psix10_wat,   psix10_lnd=psix10_lnd,   psix10_ice=psix10_ice,                               &  !=fm10, intent(inout)
-              psit2_wat=psit2_wat,    psit2_lnd=psit2_lnd,    psit2_ice=psit2_ice,                                  &  !=fh2, intent(inout)
-               HFLX_wat=HFLX_wat,     HFLX_lnd=HFLX_lnd,     HFLX_ice=HFLX_ice,                                     &
-               QFLX_wat=QFLX_wat,     QFLX_lnd=QFLX_lnd,     QFLX_ice=QFLX_ice,                                     &
-             ch=ch,CHS=CHS,CHS2=CHS2,CQS2=CQS2,CPM=CPM,                                                             &
-             ZNT=ZNT,USTM=USTM,ZOL=ZOL,MOL=MOL,RMOL=RMOL,                                                           &
-             PSIM=PSIM,PSIH=PSIH,                                                                                   &
-             HFLX=HFLX,HFX=HFX,QFLX=QFLX,QFX=QFX,LH=LH,FLHC=FLHC,FLQC=FLQC,                                         &
-             QGH=QGH,QSFC=QSFC,                                                                                     &
-             U10=U10,V10=V10,TH2=TH2,T2=T2,Q2=Q2,                                                                   &
-             GZ1OZ0=GZ1OZ0,WSPD=WSPD,wstar=wstar,qstar=qstar,                                                       &
-             spp_sfc=spp_sfc,rstoch1D=rstoch1D,                                                                     &
-             ids=ids,ide=ide, jds=jds,jde=jde, kds=kds,kde=kde,                                                     &
-             ims=ims,ime=ime, jms=jms,jme=jme, kms=kms,kme=kme,                                                     &
-             its=its,ite=ite, jts=jts,jte=jte, kts=kts,kte=kte,                                                     &
-             errmsg= errmsg, errflg=errflg                                     )
-         
-         write(0,*) "T2=",T2
+
+          call mynnsfc_land (flag_iter=flag_iter, itimestep=itimestep, i=i, j=j,      &
+               dx=DX, xland=XLAND,                                                    &
+              !3d input - transformed to single point
+               u_1=U1D, v_1=V1D, t_1=T1D, qv_1=QV1D,                                  &
+               p_1=P1D, dz8w_1=dz8w1d, rho_1=CQS2, u_2=U1D2, & !rho_1
+               v_2=V1D2, dz8w_2=dz2w1d,                                               &
+               !GFS-related input
+               sigmaf=sigmaf, vegtype= vegtype, shdmax=shdmax, ivegsrc=ivegsrc,       &  !intent(in)
+               z0pert=z0pert, ztpert=ztpert, redrag=redrag, sfc_z0_type=sfc_z0_type , &  !intent(in)
+               !2d variables - transformed to single point
+               pblh=pblh, znt=ZNT_lnd , psfcpa=psfcpa, mavail=mavail,                 &  !intent(in)
+               tskin=tskin_lnd, tsurf=tsurf_lnd, snowh=snowh_lnd,                     &  !intent(in)
+               chs=ch, chs2=CHS2, cqs2=CQS2, cqs=CQS2,                                &   !cqs not being used
+               ust=UST_lnd, ustm=USTM, stress=stress_lnd, qsfc=qsfc_lnd,              &  !intent(inout) 
+               rmol=RMOL, zol=ZOL, mol=MOL ,                                          &
+               psim=PSIM , psih=PSIH, hfx=HFX, qfx=QFX,                               &
+               u10=U10 , v10=V10, th2=TH2,                                            &
+               t2=T2, q2=Q2, flhc=FLHC, flqc=FLQC ,                                   &
+               lh=LH, gz1oz0=GZ1OZ0, wspd=WSPD , rb=rb_lnd,                           &
+               cpm=CPM , ch=ch, cm=cm_lnd, rstoch_1=rstoch1D,                         &
+               wstar=wstar,qstar=qstar,                                               &
+               ck=CQS2, cka=CQS2, cd=CQS2, cda=CQS2 ,                                 & ! ck, cka, cd, cda not being used
+               psix=psix_lnd, psit=psit_lnd, psix10=psix10_lnd, psit2=psit2_lnd,      & !fm,fh,fm10,fh2: intent(inout)
+               !namelist configuration options
+               spp_sfc=spp_sfc, sf_mynn_sfcflux_land=iz0tlnd, ISFFLX=ISFFLX,          &
+               flag_restart=flag_restart,flag_cycle=.false., psi_opt=psi_opt,         &
+               compute_flux=compute_flux,compute_diag=compute_diag,                   &
+               iter=iter, lsm=lsm, lsm_ruc=lsm_ruc,                                   &
+               !stability function tables
+                psim_stab= psim_stab ,psim_unstab=psim_unstab,psih_stab=psih_stab ,psih_unstab=psih_unstab, &
+               errmsg= errmsg, errflg=errflg                                    )
+ 
+         write(0,*) "T2=",t2,'chs=',ch,'ust=',UST_lnd,'hfx=',hfx,'wstar=',wstar
          write(0,*) "Read status:", read_stat
-         open(output_unit, file = './data/ccpp_output_lnd.txt')
-         write(output_unit,'(I5, I5, F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2)') itimestep, &
-              iter,T2,Q2,TH2,U10,V10,HFX,LH,UST_lnd,PBLH
+         open(20, file = './data/wrf_output_lnd.txt')
+         write(20,'(I5, I5, F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2)')  &
+              itimestep,iter,t2,q2,th2,u10,v10,hfx,lh,UST_lnd,pblh
 
       end do
-    end subroutine ccpp_test
-    !=================================================================================================================
-    
-end module module_ccpp_mynn_sfc_tests           
+    end subroutine wrf_test
+
+end module module_sf_mynnsfc_wrf_tests           
