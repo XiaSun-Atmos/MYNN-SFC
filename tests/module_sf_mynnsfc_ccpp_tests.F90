@@ -1,5 +1,5 @@
 ! Module for MYNN SFC scheme tests
-module module_ccpp_mynn_sfc_tests
+module module_sf_mynnsfc_ccpp_tests
   implicit none
 
   contains
@@ -10,7 +10,7 @@ module module_ccpp_mynn_sfc_tests
       ! for future use
     end subroutine init_mynn_sfc_flags_for_test_all_true
     !=================================================================================================================    
-    subroutine init_ccpp_data_for_test()
+    subroutine init_input_data_for_test()
       integer :: iostat, line_num
       character(len=2000) :: input_line
       integer, parameter :: input_unit = 10
@@ -18,7 +18,7 @@ module module_ccpp_mynn_sfc_tests
       
       write(*,*) '--- opening data files ---'
       ! Open input file
-      open(unit=input_unit, file='./data/ccpp_input_lnd.txt', status='old', action='read', iostat=iostat)
+      open(unit=input_unit, file='./data/input_lnd.txt', status='old', action='read', iostat=iostat)
 
       if (iostat /= 0) then
           print *, 'Error opening input file'
@@ -35,7 +35,7 @@ module module_ccpp_mynn_sfc_tests
           stop
       end if
 
-    end subroutine init_ccpp_data_for_test
+    end subroutine init_input_data_for_test
 
     !===============================================================================
     ! Subroutine to process each line
@@ -190,8 +190,8 @@ module module_ccpp_mynn_sfc_tests
     !=================================================================================================================
     subroutine ccpp_test()
 
-      use module_sf_mynnsfc_driver, only : SFCLAY1D_mynn
-
+      !use module_sf_mynnsfc_driver, only : SFCLAY1D_mynn
+      use module_sf_mynnsfc, only : SFCLAY1D_mynn
       integer :: iostat, line_num
       integer, parameter :: ids=1, ide=1, jds=1, jde=1, kds=1,kde=1
       integer, parameter :: ims=1, ime=1, jms=1, jme=1, kms=1,kme=1
@@ -239,9 +239,9 @@ module module_ccpp_mynn_sfc_tests
       errmsg = ''
       errflg = 0
 
-      write(*,*) '--- entring ccpp_test subroutine'    
+      write(*,*) '--- entering ccpp_test subroutine'    
       ! Initialize input data for tests
-      call init_ccpp_data_for_test()
+      call init_input_data_for_test()
 
       ! Read header
       read(input_unit, '(A)', iostat=iostat) input_line
@@ -312,7 +312,7 @@ module module_ccpp_mynn_sfc_tests
              itimestep=itimestep,iter=iter,flag_restart=flag_restart,lsm=lsm,lsm_ruc=lsm_ruc,                       &
                     wet=wet,          dry=dry,          icy=icy,                                                    &  !intent(in)
               tskin_wat=tskin_wat,    tskin_lnd=tskin_lnd,    tskin_ice=tskin_ice,                                  &  !intent(in)
-              tsurf_wat=tsurf_wat,    tsurf_lnd=tskin_lnd,    tsurf_ice=tskin_ice,                                  &  !intent(in)
+              tsurf_wat=tsurf_wat,    tsurf_lnd=tsurf_lnd,    tsurf_ice=tskin_ice,                                  &  !intent(in)
                qsfc_wat=qsfc_wat,     qsfc_lnd=qsfc_lnd,     qsfc_ice=qsfc_ice,                                     &  !intent(in)
               snowh_wat=snowh_wat,    snowh_lnd=snowh_lnd,    snowh_ice=snowh_ice,                                  &  !intent(in)
                 ZNT_wat=ZNT_wat,      ZNT_lnd=ZNT_lnd,      ZNT_ice=ZNT_ice,                                        &  !intent(inout)
@@ -343,11 +343,11 @@ module module_ccpp_mynn_sfc_tests
          write(0,*) "T2=",T2
          write(0,*) "Read status:", read_stat
          open(output_unit, file = './data/ccpp_output_lnd.txt')
-         write(output_unit,'(I5, I5, F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2)') itimestep, &
+         write(output_unit,'(I5, I5, F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F10.2,F15.2,F10.2)') itimestep, &
               iter,T2,Q2,TH2,U10,V10,HFX,LH,UST_lnd,PBLH
 
       end do
     end subroutine ccpp_test
     !=================================================================================================================
-    
-end module module_ccpp_mynn_sfc_tests           
+
+end module module_sf_mynnsfc_ccpp_tests           
