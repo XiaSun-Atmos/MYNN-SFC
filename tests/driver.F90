@@ -8,5 +8,7 @@ program driver
   use module_sf_mynnsfc_wrf_tests
   implicit none
   call ccpp_test()
-  call wrf_test()
+  call wrf_test(case='wat')
+  call wrf_test(case='lnd')
+  call wrf_test(case='icy')
 end program driver
