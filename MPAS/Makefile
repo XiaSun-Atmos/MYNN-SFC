@@ -29,7 +29,7 @@ module_sf_mynnsfc_ice.o: \
 	module_sf_mynnsfc_common.o
 
 module_sf_mynnsfc_driver.o: \
-	module_sf_mynnedmf_common.o \
+	module_sf_mynnsfc_common.o \
 	module_sf_mynnsfc_land.o \
 	module_sf_mynnsfc_water.o \
 	module_sf_mynnsfc_ice.o

@@ -222,7 +222,7 @@
  integer,intent(in),optional:: sf_mynn_sfcflux_land
  integer:: flag_lsm !local in mpas, which uses characters
  integer,parameter:: lsm_ruc=3
- character,intent(in)optional::flagc_lsm
+ character,intent(in),optional::flagc_lsm
  integer,intent(in),optional:: spp_pbl
  integer,intent(in),optional:: ivegsrc
  integer,intent(inout),optional:: sfc_z0_type ! option for calculating surface roughness length over ocean
