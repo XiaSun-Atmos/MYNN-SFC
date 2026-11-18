@@ -1180,51 +1180,48 @@ end subroutine mynnsfc_water
  subroutine gfs_z0_wat(z0rl,ustar,wspd,z1,sfc_z0_type,redrag)
 
  real(kind_phys), intent(out)  :: z0rl
- real(kind_phys), intent(inout):: ustar
+ real(kind_phys), intent(in)   :: ustar
  real(kind_phys), intent(in)   :: wspd,z1
  logical, intent(in)           :: redrag
  integer, intent(in)           :: sfc_z0_type
- real(kind_phys)               :: z0,z0max,wind10m
+ real(kind_phys)               :: z0,wind10m
  real(kind_phys), parameter    :: charnock = 0.014, z0s_max=.317e-2
 
- !z0           = 0.01 * z0rl  !already converted to meters in the wrapper
- z0           = z0rl
- z0max        = max(1.0e-6_kind_phys, min(z0,z1))
- ustar        = sqrt(grav * z0 / charnock)
  wind10m      = wspd*log(ten/1e-4_kind_phys)/log(z1/1e-4_kind_phys)
  !wind10m      = sqrt(u10m*u10m+v10m*v10m)
  !
- if (sfc_z0_type >= 0) then
-    if (sfc_z0_type == 0) then
-       z0 = (charnock / grav) * ustar * ustar
+if (sfc_z0_type == 0 .or. sfc_z0_type == -1) then
+   ! -1 reaches here when wave model z0 is not usable or over lake or partial ice
+   ! (sfc_diff uses z0=1e-6)
+   z0 = (charnock / grav) * ustar * ustar
 
-       ! mbek -- toga-coare flux algorithm
-       !               z0 = (charnock / g) * ustar*ustar +  arnu/ustar
-       !  new implementation of z0
-       !               cc = ustar * z0 / rnu
-       !               pp = cc / (1. + cc)
-       !               ff = g * arnu / (charnock * ustar ** 3)
-       !               z0 = arnu / (ustar * ff ** pp)
+   ! mbek -- toga-coare flux algorithm
+   !               z0 = (charnock / g) * ustar*ustar +  arnu/ustar
+   !  new implementation of z0
+   !               cc = ustar * z0 / rnu
+   !               pp = cc / (1. + cc)
+   !               ff = g * arnu / (charnock * ustar ** 3)
+   !               z0 = arnu / (ustar * ff ** pp)
 
-       if (redrag) then
-          !z0rl = 100.0 * max(min(z0, z0s_max), 1.e-7)
-          z0rl = max(min(z0, z0s_max), 1.e-7_kind_phys)
-       else
-          !z0rl = 100.0 * max(min(z0,.1), 1.e-7)
-          z0rl = max(min(z0,.1_kind_phys), 1.e-7_kind_phys)
-       endif
+   if (redrag) then
+      !z0rl = 100.0 * max(min(z0, z0s_max), 1.e-7)
+      z0rl = max(min(z0, z0s_max), 1.e-7_kind_phys)
+   else
+      !z0rl = 100.0 * max(min(z0,.1), 1.e-7)
+      z0rl = max(min(z0,.1_kind_phys), 1.e-7_kind_phys)
+   endif
 
-    elseif (sfc_z0_type == 6) then   ! wang
-       call znot_m_v6(wind10m, z0)  ! wind, m/s, z0, m
-       !z0rl = 100.0 * z0          ! cm
-    elseif (sfc_z0_type == 7) then   ! wang
-       call znot_m_v7(wind10m, z0)  ! wind, m/s, z0, m
-       !z0rl = 100.0 * z0          ! cm
-    else
-       z0rl = 1.0e-6_kind_phys
-    endif
-
- endif
+elseif (sfc_z0_type == 6) then   ! wang
+   call znot_m_v6(wind10m, z0)  ! wind, m/s, z0, m
+   !z0rl = 100.0 * z0          ! cm
+   z0rl = z0
+elseif (sfc_z0_type == 7) then   ! wang
+   call znot_m_v7(wind10m, z0)  ! wind, m/s, z0, m
+   !z0rl = 100.0 * z0          ! cm
+   z0rl = z0
+else
+   z0rl = 1.0e-6_kind_phys
+endif
 
  end subroutine gfs_z0_wat
 !--------------------------------------------------------------------
