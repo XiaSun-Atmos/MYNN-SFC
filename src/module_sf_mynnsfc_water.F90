@@ -1185,16 +1185,19 @@ end subroutine mynnsfc_water
  logical, intent(in)           :: redrag
  integer, intent(in)           :: sfc_z0_type
  real(kind_phys)               :: z0,wind10m
- real(kind_phys), parameter    :: charnock = 0.014, z0s_max=.317e-2
+ !real(kind_phys), parameter    :: charnock = 0.014, z0s_max=.317e-2
+ real(kind_phys), parameter    :: charnock = 0.018_kind_phys,   & !as in sfc_diff
+                                  z0s_max  = .317e-2_kind_phys, & !as in sfc_diff
+                                  vis      = 1.4e-5_kind_phys     !as in sfc_diff
 
  wind10m      = wspd*log(ten/1e-4_kind_phys)/log(z1/1e-4_kind_phys)
  !wind10m      = sqrt(u10m*u10m+v10m*v10m)
  !
 if (sfc_z0_type == 0 .or. sfc_z0_type == -1) then
    ! -1 reaches here when wave model z0 is not usable or over lake or partial ice
-   ! (sfc_diff uses z0=1e-6)
-   z0 = (charnock / grav) * ustar * ustar
-
+   ! (sfc_diff uses z0=1e-6) at lake/ice points with valid z0rl_wav; Charnock is used here
+   ! same as in sfc_diff, floor value of 0.05 matches CORE routine
+   z0 = 0.11_kind_phys*vis/max(ustar,0.05_kind_phys)+(charnock / grav) * ustar * ustar
    ! mbek -- toga-coare flux algorithm
    !               z0 = (charnock / g) * ustar*ustar +  arnu/ustar
    !  new implementation of z0
